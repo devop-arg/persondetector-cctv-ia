@@ -46,7 +46,7 @@ sudo systemctl restart dvr-alertas cam_watcher telegram_bot
 | Componente | Detalle |
 |------------|---------|
 | Lenguaje | Python 3 |
-| IA | OpenRouter API (antigravity como fallback) |
+| IA | OpenRouter API (Gemini 3.1 Flash Lite) |
 | Bot | Telegram Bot API (webhook) |
 | Monitoreo DVR | ffmpeg + RTSP |
 | Detección archivos | inotifywait |

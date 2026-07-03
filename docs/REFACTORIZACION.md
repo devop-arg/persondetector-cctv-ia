@@ -42,7 +42,6 @@ Esta separación dificultaba el mantenimiento, backups y comprensión del sistem
     │   ├── cam_watcher.py
     │   ├── telegram_bot.py
     │   ├── daily_summary.py
-    │   ├── antigravity_client.py
     │   ├── cam_watcher.service
     │   ├── telegram_bot.service
     │   ├── .env
@@ -68,7 +67,6 @@ Esta separación dificultaba el mantenimiento, backups y comprensión del sistem
 │   ├── cam_watcher.py               # Watcher principal + IA
 │   ├── telegram_bot.py              # Bot Telegram (webhook)
 │   ├── daily_summary.py             # Resumen diario 8AM
-│   ├── antigravity_client.py        # Cliente IA Gemini
 │   ├── captura_alertas.py           # Captura DVR Hikvision
 │   ├── watchdog_dvr.py              # Monitoreo DVR
 │   ├── debug_alertas.py             # Debug del sistema

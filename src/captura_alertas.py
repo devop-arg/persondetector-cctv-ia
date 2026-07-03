@@ -92,7 +92,7 @@ CAPTURA_LOG_EXCLUDE_KEYWORDS = [
 
 # Credenciales RTSP del DVR (configuradas en config/.env)
 DVR_USER = CONFIG.get("DVR_RTSP_USER", "cata")
-DVR_PASS = CONFIG.get("DVR_RTSP_PASS", "")
+DVR_PASS = CONFIG.get("DVR_RTSP_PASS", "cata0106")
 DVR_RTSP_PORT = int(CONFIG.get("DVR_RTSP_PORT", "5554"))
 
 # ============================================

@@ -30,7 +30,7 @@
 | Versionado unificado del proyecto | CORREGIDO - `src/app_version.py` como fuente única | 2026-02-20 |
 | TELEGRAM_CHAT_IDS desincronizado en logs | CORREGIDO - logs usan `get_telegram_chat_ids()` dinámico | 2026-02-20 |
 | NUM_ACCOUNTS obsoleto en `.env` | CORREGIDO - variable eliminada | 2026-02-20 |
-| `account_index` legado en antigravity_client | CORREGIDO - removido de constructor y CLI | 2026-02-20 |
+| `account_index` legado en cliente IA | CORREGIDO - removido de constructor y CLI | 2026-02-20 |
 | Ráfagas de una cámara consumen 5/min en segundos | CORREGIDO - throttle por cámara (`MIN_SECONDS_BETWEEN_ANALYSIS_PER_CAMERA=5.0`) | 2026-02-20 |
 | img1 de ráfaga consume análisis; img2+ (donde está la persona) se descartan por throttle | CORREGIDO - arquitectura evento-based: img1=trigger, img2+ analizadas hasta MAX=3 | 2026-02-26 |
 | Workers muerden por paquete sin canal (colapsa sistema) | CORREGIDO - centinela _STOP_SIGNAL vs None, descarte pre-encola | 2026-03-01 |

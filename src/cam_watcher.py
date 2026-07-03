@@ -30,9 +30,6 @@ import requests
 from PIL import Image
 import numpy as np
 
-# Agregar el directorio actual al path para importar antigravity_client
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from antigravity_client import AntigravityClient
 from app_version import CAM_WATCHER_VERSION
 
 # ============================================
@@ -133,23 +130,6 @@ OPENROUTER_VISION_MODELS = [
     "qwen/qwen3.5-9b",
     "qwen/qwen3.5-flash-02-23",
 ]
-
-
-def usa_openrouter(model: str) -> bool:
-    """Determina si el modelo usa OpenRouter en lugar de Antigravity."""
-    if not OPENROUTER_API_KEY:
-        return False
-    model_lower = model.lower()
-    # Modelos que usan OpenRouter (sin prefijo google/)
-    vision_models = [
-        "gemma-3-12b",
-        "gemma-3-27b",
-        "gemini-2.5-flash-lite",
-        "gemini-3.1-flash-lite",
-        "qwen3.5-9b",
-        "qwen3.5-flash-02-23",
-    ]
-    return any(m in model_lower for m in vision_models)
 
 
 # Configuración avanzada

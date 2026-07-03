@@ -1,4 +1,4 @@
-# Person Detector CCTV IA - Sistema de Vigilancia con IA
+# CamDetector - Sistema de Vigilancia con IA
 
 Sistema de vigilancia que combina cámaras de seguridad (DVR Hikvision + cámara IP por FTP) con análisis de inteligencia artificial para detectar personas y enviar alertas por Telegram.
 
@@ -29,7 +29,8 @@ Sistema de vigilancia que combina cámaras de seguridad (DVR Hikvision + cámara
                                     ▼               ▼               ▼
                              ┌────────────┐  ┌────────────┐  ┌────────────┐
 │ OpenRouter │  │  Telegram  │  │   Logs +   │
-                             │ Antigravity│  │  Bot/Fotos │  │   Stats    │
+                              │ OpenRouter │  │  Telegram  │  │   Logs +   │
+                              │  (Gemini)  │  │  Bot/Fotos │  │   Stats    │
                              └────────────┘  └────────────┘  └────────────┘
 ```
 
@@ -61,7 +62,6 @@ El sistema se compone de 3 servicios systemd + 2 tareas cron:
 │   ├── app_version.py               # Versionado centralizado del proyecto
 │   ├── daily_summary.py             # Resumen diario 8:00 AM
 │   ├── watchdog_dvr.py              # Monitoreo DVR cada 5 min
-│   ├── antigravity_client.py        # Cliente IA Gemini vía Antigravity OAuth
 │   ├── debug_alertas.py             # Debug del protocolo DVR
 │   └── .env -> ../config/.env       # Enlace simbólico
 
@@ -241,7 +241,7 @@ Monitorea que `dvr-alertas.service` esté funcionando:
 | `AI_MODEL` | google/gemini-3.1-flash-lite-preview | Modelo de IA |
 | `AI_IMAGE_SCALE` | 50 | % de resolución enviada a la IA |
 | `DVR_RTSP_USER` | cata | Usuario RTSP del DVR |
-| `DVR_RTSP_PASS` | (configurar) | Password RTSP del DVR |
+| `DVR_RTSP_PASS` | DVR_PASSWORD | Password RTSP del DVR |
 | `DVR_RTSP_PORT` | 5554 | Puerto RTSP del DVR |
 | `DVR_TELEGRAM_CHAT_ID` | 708923002 | Chat para alertas operativas de DVR |
 | `RATE_LIMIT_MAX` | 60 | Imágenes/minuto |
@@ -258,7 +258,7 @@ Monitorea que `dvr-alertas.service` esté funcionando:
 | Modelo | DS-7208HQHI-K1 |
 | IP | Dinámica (guardada en `data/dvr_ip.txt`) |
 | Puerto RTSP | 5554 |
-| Credenciales | USUARIO / PASSWORD |
+| Credenciales | cata / DVR_PASSWORD |
 | Canales | 4 (A1-A4) |
 
 Configuración en el DVR: Configuración > Red > Centro de Alarmas > IP del VPS, puerto 8088, protocolo TCP.
@@ -346,7 +346,7 @@ journalctl -u dvr-alertas -n 20 --no-pager
 
 # Probar RTSP manualmente
 DVR_IP=$(cat /home/capw/projects/camdetector/data/dvr_ip.txt)
-ffmpeg -rtsp_transport tcp -i "rtsp://USUARIO:PASSWORD@${DVR_IP}:5554/Streaming/Channels/101" -frames:v 1 test.jpg
+ffmpeg -rtsp_transport tcp -i "rtsp://cata:DVR_PASSWORD@${DVR_IP}:5554/Streaming/Channels/101" -frames:v 1 test.jpg
 
 # Verificar puerto
 ss -tlnp | grep 8088

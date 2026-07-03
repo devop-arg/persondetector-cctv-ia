@@ -411,7 +411,7 @@ ANALIZADO | DVR-A1 | archivo.jpg | PERSONA sospechosa=80% | tokens=168 (p:123/c:
 
 ### Cambio de modelo IA: OpenRouter (gemini-2.5-flash-lite)
 
-**Problema:** El sistema anterior usaba Antigravity/OpenCode que tiene cuota limitada.
+**Problema:** El sistema anterior usaba un proveedor con cuota limitada.
 
 **Solución:** Se migró a OpenRouter API con modelo gratuito `google/gemini-2.5-flash-lite-preview-09-2025`.
 
@@ -529,7 +529,7 @@ cuota de API sin aporte real a la detección.
 - `cam_watcher.py`: logs de destinatarios Telegram ahora usan recarga dinámica (`get_telegram_chat_ids()`)
 
 ### Limpieza técnica
-- `antigravity_client.py`: eliminado soporte legado de selección manual de cuenta (`account_index`, `--use-account`)
+- Eliminado soporte legado de selección manual de cuenta (`account_index`, `--use-account`)
 - `config/.env`: removida variable obsoleta `NUM_ACCOUNTS`
 
 ---
@@ -631,7 +631,7 @@ Ver `docs/REFACTORIZACION.md` para detalles completos.
 ## v1.5.0 (2026-01-24)
 
 ### Nuevas funciones
-- Rotación de cuentas Antigravity: 5 cuentas para 50 img/min
+- Rotación de cuentas: 5 cuentas para 50 img/min
 - Cada cuenta tenía su propio rate limit de 10/min
 - Solo entraba en cooldown global si TODAS las cuentas estaban saturadas
 
