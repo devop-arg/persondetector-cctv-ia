@@ -1,0 +1,21 @@
+[Unit]
+Description=Camera Person Detection Watcher
+Documentation=https://github.com/anomalyco/opencode
+After=network.target
+
+[Service]
+Type=simple
+User=capw
+Group=capw
+WorkingDirectory=/home/capw/projects/camdetector/src
+ExecStart=/usr/bin/python3 /home/capw/projects/camdetector/src/cam_watcher.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Entorno
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Ejecuta mqtt-firewall-sync periódicamente (red de seguridad)
+Documentation=file:///home/capw/docsvps/docs/mqtt-firewall-sync.md
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+Unit=mqtt-firewall-sync.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

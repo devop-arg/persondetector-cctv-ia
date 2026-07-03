@@ -1,0 +1,28 @@
+[Unit]
+Description=DVR Alertas - Sistema de Captura Hikvision
+Documentation=file:///home/capw/projects/camdetector/docs/README.md
+After=network.target
+
+[Service]
+Type=simple
+User=capw
+Group=capw
+WorkingDirectory=/home/capw/projects/camdetector/src
+ExecStart=/usr/bin/python3 /home/capw/projects/camdetector/src/captura_alertas.py
+Restart=always
+RestartSec=10
+
+# Reinicio automático si falla
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Variables de entorno
+Environment=PYTHONUNBUFFERED=1
+
+# Logs adicionales a journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dvr-alertas
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+[Unit]
+Description=Sincroniza firewall MQTT con IP de casa (CamDetector)
+Documentation=file:///home/capw/docsvps/docs/mqtt-firewall-sync.md
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mqtt-firewall-sync.sh
+StandardOutput=journal
+StandardError=journal
+# Hardening básico
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadOnlyPaths=/home/capw/projects/camdetector/data/dvr_ip.txt
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target

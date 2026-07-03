@@ -1,0 +1,10 @@
+[Unit]
+Description=Vigila cambios en dvr_ip.txt y dispara mqtt-firewall-sync
+Documentation=file:///home/capw/docsvps/docs/mqtt-firewall-sync.md
+
+[Path]
+PathChanged=/home/capw/projects/camdetector/data/dvr_ip.txt
+Unit=mqtt-firewall-sync.service
+
+[Install]
+WantedBy=multi-user.target

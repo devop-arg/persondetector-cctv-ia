@@ -1,0 +1,38 @@
+# Secrets
+config/.env
+*.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+*.egg-info/
+
+# Data
+data/
+
+# Logs
+logs/
+
+# State
+config/state.json
+config/stats_history.json
+
+# Backup files
+*.backup*
+*.original
+*.restaurado*
+*FAILED*
+*PRE_*
+backups/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
