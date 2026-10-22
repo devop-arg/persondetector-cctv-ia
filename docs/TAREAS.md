@@ -1,10 +1,10 @@
 # Tareas Pendientes - CamDetector
 
-## Estado Actual (2026-07-03)
+## Estado Actual (2026-10-22)
 
-- **Versión cam_watcher:** 2.11.0 (Gemini 3.1 Flash Lite, modelo probado vs Qwen)
+- **Versión cam_watcher:** 2.11.0 (gpt-6-luna, provider GitHub Copilot con fallback a OpenRouter)
 - **Versión telegram_bot:** 2.6.2
-- **Modelo IA:** google/gemini-3.1-flash-lite-preview
+- **Modelo IA:** gpt-6-luna (`AI_PROVIDER=copilot`)
 - **Capacidad:** 60 imágenes/minuto
 - **Lógica de evento:** gap 10s por cámara, máximo 20 análisis por evento
 - **Horario de detección:** 00:01 - 07:45 (modo auto)

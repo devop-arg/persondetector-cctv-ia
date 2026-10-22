@@ -18,6 +18,7 @@ import sys
 import json
 import urllib.request
 from datetime import datetime
+import os
 from pathlib import Path
 
 # Configuración
@@ -31,7 +32,7 @@ MAX_INACTIVITY_MINUTES = 45
 RESTART_STATE_FILE = "/home/capw/projects/camdetector/logs/watchdog_last_restart.txt"
 
 # Telegram (misma config que captura_alertas.py)
-TELEGRAM_BOT_TOKEN = "818016770:AAHIlrPWKVmdY7BoZQallko8Uv-UI8DUXSE"
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = "708923002"
 
 

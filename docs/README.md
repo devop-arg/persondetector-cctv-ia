@@ -30,7 +30,7 @@ Sistema de vigilancia que combina cámaras de seguridad (DVR Hikvision + cámara
                              ┌────────────┐  ┌────────────┐  ┌────────────┐
 │ OpenRouter │  │  Telegram  │  │   Logs +   │
                               │ OpenRouter │  │  Telegram  │  │   Logs +   │
-                              │  (Gemini)  │  │  Bot/Fotos │  │   Stats    │
+                              │gpt-6-luna  │  │  Bot/Fotos │  │   Stats    │
                              └────────────┘  └────────────┘  └────────────┘
 ```
 
@@ -144,14 +144,15 @@ QUEUE_SIZE = 50                # Cola de alertas
 
 ### 2. cam_watcher.py (cam_watcher.service) - v2.10.1
 
-Monitorea los directorios de imágenes y analiza con OpenRouter para detectar personas.
+Monitorea los directorios de imágenes y analiza con **GitHub Copilot** (`gpt-6-luna`,
+Responses API) para detectar personas. Si Copilot falla, reintenta con OpenRouter.
 
 **Funcionamiento:**
 - Usa `inotifywait` para detectar nuevas imágenes en `data/dvr_capturas/` y `data/ftpcam1/`
 - **Fondo subtraction**: compara cada imagen con una referencia almacenada (escena "vacía"). Si diferencia < 5%, descarta sin llamar a la IA
 - Agrupa las imágenes por evento (gap > 10s entre imágenes = nuevo evento)
 - img1 de cada evento actúa solo como trigger — no se envía a la IA
-- img2 en adelante se analizan con OpenRouter, hasta un máximo de 20 análisis por evento
+- img2 en adelante se analizan con el proveedor IA configurado (`AI_PROVIDER`), hasta un máximo de 20 análisis por evento
 - La IA responde si hay persona y, para A1/A2, nivel de sospecha (0-100%)
 - Si sospecha >= 50%: envía foto + alerta por Telegram
 - Registra estadísticas en `state.json` y `stats_history.json`
@@ -238,8 +239,12 @@ Monitorea que `dvr-alertas.service` esté funcionando:
 | `WATCH_DIRS` | .../ftpcam1,.../dvr_capturas | Directorios monitoreados |
 | `DETECCION_INICIO` | 00:01 | Inicio horario activo |
 | `DETECCION_FIN` | 07:45 | Fin horario activo |
-| `AI_MODEL` | google/gemini-3.1-flash-lite-preview | Modelo de IA |
-| `AI_IMAGE_SCALE` | 50 | % de resolución enviada a la IA |
+| `AI_MODEL` | gpt-6-luna | Modelo de IA (mismo slug en Copilot y OpenRouter) |
+| `AI_PROVIDER` | copilot | `copilot` (api.githubcopilot.com/responses) o `openrouter` (chat/completions) |
+| `COPILOT_GITHUB_TOKEN` | (vacío) | Token GitHub para Copilot; vacío = `gh auth token` del usuario `capw` |
+| `AI_FALLBACK_OPENROUTER` | true | Si Copilot falla (401/429/5xx/red) reintenta con OpenRouter |
+| `AI_MAX_OUTPUT_TOKENS` | 200 | Techo de tokens de salida en Copilot (incluye razonamiento) |
+| `AI_IMAGE_SCALE` | 100 | % de resolución enviada a la IA |
 | `DVR_RTSP_USER` | cata | Usuario RTSP del DVR |
 | `DVR_RTSP_PASS` | DVR_PASSWORD | Password RTSP del DVR |
 | `DVR_RTSP_PORT` | 5554 | Puerto RTSP del DVR |

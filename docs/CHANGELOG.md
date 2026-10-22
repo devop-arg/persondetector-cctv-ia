@@ -1,5 +1,53 @@
 # Changelog - CamDetector
 
+## 2026-10-22
+
+### Cambio de proveedor IA: OpenRouter → GitHub Copilot (mismo modelo `gpt-6-luna`)
+
+**Motivo:** pasar el análisis de imágenes de OpenRouter a la suscripción de GitHub Copilot,
+manteniendo el mismo modelo (`gpt-6-luna`) para no alterar el comportamiento de detección.
+
+**Hallazgo clave:** en Copilot, `gpt-6-luna` sólo está disponible en la **Responses API**
+(`supported_endpoints: ["/responses", "ws:/responses"]`). Contra `/chat/completions`
+devuelve `400 unsupported_api_for_model`, así que el cambio no es sólo de URL: hay un
+cliente nuevo con el formato de Responses (`input` + `input_text`/`input_image`).
+
+#### Cambios
+- `src/cam_watcher.py`: nueva `_analizar_con_copilot()` (POST `api.githubcopilot.com/responses`,
+  headers `Editor-Version`, `Copilot-Integration-Id`, `Copilot-Vision-Request`);
+  `_resolve_copilot_token()` toma `COPILOT_GITHUB_TOKEN` del `.env` o `gh auth token`
+  (caché 600s); `analizar_imagen()` elige proveedor según `AI_PROVIDER` y cae a OpenRouter
+  si Copilot falla (`AI_FALLBACK_OPENROUTER`). `gpt-6-luna` agregado a la lista documental
+  `OPENROUTER_VISION_MODELS`.
+- `config/.env`: `AI_PROVIDER=copilot`, `COPILOT_GITHUB_TOKEN=` (vacío → `gh auth token`),
+  `AI_FALLBACK_OPENROUTER=true`, `AI_MAX_OUTPUT_TOKENS=200`; comentarios de modelos al día.
+- `docs/README.md`, `docs/TAREAS.md`, `docs/TESTING.md`: modelo y proveedor actualizados;
+  nueva sección de la prueba de paridad.
+
+#### Verificación (antes de aplicar)
+- 6 imágenes reales (3 con persona, 3 sin persona): paridad 6/6 en PERSONA vs OpenRouter,
+  sospecha ±5, ~2.65k tokens, Copilot 0.5-2.5s más rápido.
+- Fallback probado con token inválido: 401 de Copilot → reintento con OpenRouter OK.
+
+#### Backup pre-cambio
+- `backups/.env.bak-20261022-144632-copilot`
+- `backups/cam_watcher.py.bak-20261022-144632-copilot`
+
+## 2026-10-08
+
+### Control activar/desactivar para cámara A4 (`/cam4`)
+
+**Motivo:** falsos positivos en A4 por lluvia (gotas/telaraña sobre el lente y reflejos IR). El modelo `gpt-6-luna` (activo desde 2026-10-01) no tuvo positivos en A4 hasta que empezó la lluvia.
+
+#### Cambios
+- `src/telegram_bot.py`: `teclado_cam3()`/`cmd_cam3()` pasan a `teclado_cam(canal)`/`cmd_cam(chat_id, canal, accion)`; constante `CAMARAS_CONTROLABLES = (3, 4)`; comandos `/cam3` y `/cam4` con botones inline (`cam{n}:activar|desactivar|estado`), ayuda y menú del bot.
+- `src/captura_alertas.py`: log de arranque `control_camaras=A3:...,A4:...`.
+- `config/.env`: `AI_MODEL=gpt-6-luna` (cambio del 2026-10-01).
+- `config/camera_control.json`: `DVR-A4=false` (A4 desactivada por lluvia).
+
+#### Backup pre-cambio
+- `backups/camera_control.json.20261008_pre_A4`
+
 ## v2.10.11 (2026-03-19)
 
 ### Comparador de fondo reaplicado también a imágenes pendientes del evento
@@ -424,7 +472,7 @@ ANALIZADO | DVR-A1 | archivo.jpg | PERSONA sospechosa=80% | tokens=168 (p:123/c:
 **Cambios en `.env`:**
 ```
 AI_MODEL=google/gemini-2.5-flash-lite-preview-09-2025
-OPENROUTER_API_KEY=sk-or-v1-TU_API_KEY
+OPENROUTER_API_KEY=sk-or-..._KEY
 ```
 
 **Cambios en `cam_watcher.py`:**

@@ -1,3 +1,40 @@
+# Testing - CamDetector
+
+## 2026-10-22 — Paridad Copilot vs OpenRouter (gpt-6-luna)
+
+**Objetivo:** validar el cambio de proveedor (OpenRouter → GitHub Copilot) con el mismo
+modelo antes de aplicarlo al servicio.
+
+**Hallazgo previo:** en Copilot, `gpt-6-luna` sólo acepta `/responses`
+(`supported_endpoints: ["/responses", "ws:/responses"]`). `POST /chat/completions`
+devuelve `400 unsupported_api_for_model`. Por eso el cambio incluye un cliente nuevo
+(Responses API), no sólo otra URL.
+
+**Script:** `/home/capw/.hermes/cache/scratch/paridad_copilot.py` (prueba en seco, no
+toca config ni servicio) + `src/cam_watcher._analizar_con_copilot` vía `analizar_imagen`.
+
+**Casos:** 6 imágenes reales ya analizadas por el watcher (3 con persona del audit,
+3 sin persona), con el prompt real de cada cámara.
+
+| Caso | Audit | Copilot | OpenRouter | Latencia Copilot |
+|------|-------|---------|------------|------------------|
+| A1 17/10 22:50 | SI 80 | SI 80 | SI 75 | 2.26s |
+| A1 17/10 22:51 | SI 90 | SI 90 | SI 90 | 2.29s |
+| A2 18/10 21:10 | SI 80 | SI 80 | SI 75 | 2.77s |
+| A2 22/10 07:34 | NO | NO 0 | NO 0 | 2.27s |
+| A2 22/10 07:34 | NO | NO 0 | NO 0 | 1.94s |
+| A2 22/10 07:34 | NO | NO 0 | NO 0 | 1.81s |
+
+**Resultado:** paridad 6/6 en PERSONA; sospecha dentro de ±5; ~2.65k tokens en ambos.
+Copilot respondió 0.5-2.5s más rápido por análisis.
+
+**Fallback verificado:** con token inválido, Copilot devuelve 401 → warning
+`Copilot falló (...); reintentando con OpenRouter` y el análisis se completa con
+OpenRouter (persona=False, 2658 tokens, 4.9s).
+
+**Limitaciones de la API Copilot:** soporta 1 imagen por request y 3 MB por imagen
+(`capabilities.limits.vision`); las capturas del DVR (~500-650 KB) entran sin problema.
+
 # Testing de Modelos IA
 
 ## 2026-07-03 — Gemini 3.1 Flash Lite vs Qwen 3.5 Flash

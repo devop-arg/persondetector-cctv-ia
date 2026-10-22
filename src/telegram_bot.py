@@ -15,6 +15,8 @@ Comandos disponibles:
   /historial  - Historial con tokens
   /espacio    - Espacio en disco
   /camaras    - Estadísticas DVR por cámara
+  /cam3       - Control de cámara A3 con botones
+  /cam4       - Control de cámara A4 con botones
   /destinatarios - Muestra chat IDs configurados (solo admin)
   /agregar    - Agregar destinatario (solo admin)
   /limpiar    - Limpiar imágenes antiguas (solo admin)
@@ -73,9 +75,16 @@ if not TELEGRAM_ADMIN_ID and TELEGRAM_CHAT_IDS:
 DETECCION_INICIO = CONFIG.get('DETECCION_INICIO', '00:01')
 DETECCION_FIN = CONFIG.get('DETECCION_FIN', '07:45')
 
+# Cámaras controlables
+CAMARAS_CONTROLABLES = (3, 4)
+
 # Estado
 STATE_FILE = CONFIG.get('STATE_FILE', '/home/capw/projects/camdetector/config/state.json')
 STATS_HISTORY_FILE = CONFIG.get('STATS_HISTORY_FILE', '/home/capw/projects/camdetector/config/stats_history.json')
+CAMERA_CONTROL_FILE = Path(CONFIG.get(
+    'CAMERA_CONTROL_FILE',
+    '/home/capw/projects/camdetector/config/camera_control.json'
+))
 
 # Configurar logging
 logging.basicConfig(
@@ -121,6 +130,29 @@ def guardar_estado(state: Dict[str, Any]):
         os.fsync(f.fileno())  # Forzar escritura a disco
         fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # Liberar lock
 
+def cargar_control_camaras() -> Dict[str, bool]:
+    """Carga el control individual de cámaras (process-safe)."""
+    try:
+        with open(CAMERA_CONTROL_FILE, 'r') as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            data = json.load(f)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            return data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+def guardar_control_camaras(control: Dict[str, bool]):
+    """Guarda el control individual de cámaras (process-safe)."""
+    CAMERA_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CAMERA_CONTROL_FILE, 'a+') as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        f.seek(0)
+        f.truncate()
+        json.dump(control, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
 def parse_time(time_str: str) -> dtime:
     """Convierte string HH:MM a objeto time."""
     h, m = map(int, time_str.split(':'))
@@ -163,20 +195,64 @@ def obtener_estado_actual() -> tuple:
 # TELEGRAM API
 # ============================================
 
-def enviar_mensaje(chat_id: str, texto: str) -> bool:
-    """Envía un mensaje de texto a Telegram."""
+def enviar_mensaje(
+    chat_id: str,
+    texto: str,
+    reply_markup: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Envía un mensaje de texto a Telegram, opcionalmente con botones."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
+    payload: Dict[str, Any] = {
         'chat_id': chat_id,
         'text': texto,
         'parse_mode': 'HTML'
     }
+    if reply_markup is not None:
+        payload['reply_markup'] = reply_markup
     
     try:
         response = requests.post(url, json=payload, timeout=10)
         return response.json().get('ok', False)
     except Exception as e:
         logger.error(f"Error enviando mensaje: {e}")
+        return False
+
+def responder_callback(callback_query_id: str, texto: str = "", show_alert: bool = False) -> bool:
+    """Confirma a Telegram la pulsación de un botón inline."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery"
+    payload = {
+        'callback_query_id': callback_query_id,
+        'text': texto,
+        'show_alert': show_alert,
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        return response.json().get('ok', False)
+    except Exception as e:
+        logger.error(f"Error confirmando botón de Telegram: {e}")
+        return False
+
+def editar_mensaje(
+    chat_id: str,
+    message_id: int,
+    texto: str,
+    reply_markup: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Actualiza el mensaje que contiene los botones inline."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageText"
+    payload: Dict[str, Any] = {
+        'chat_id': chat_id,
+        'message_id': message_id,
+        'text': texto,
+        'parse_mode': 'HTML',
+    }
+    if reply_markup is not None:
+        payload['reply_markup'] = reply_markup
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        return response.json().get('ok', False)
+    except Exception as e:
+        logger.error(f"Error editando mensaje de Telegram: {e}")
         return False
 
 def enviar_a_todos(texto: str) -> int:
@@ -190,6 +266,60 @@ def enviar_a_todos(texto: str) -> int:
 # ============================================
 # HANDLERS DE COMANDOS
 # ============================================
+
+def teclado_cam(canal: int) -> Dict[str, Any]:
+    """Construye los botones inline para controlar una cámara por canal."""
+    return {
+        'inline_keyboard': [
+            [
+                {'text': f'✅ Activar A{canal}', 'callback_data': f'cam{canal}:activar'},
+                {'text': f'🔕 Desactivar A{canal}', 'callback_data': f'cam{canal}:desactivar'},
+            ],
+            [
+                {'text': '🔄 Ver estado', 'callback_data': f'cam{canal}:estado'},
+            ],
+        ]
+    }
+
+def cmd_cam(chat_id: str, canal: int, accion: str = "") -> str:
+    """Consulta o cambia el estado operativo de una cámara DVR por canal."""
+    accion = accion.strip().lower()
+    control = cargar_control_camaras()
+    clave = f'DVR-A{canal}'
+    activa = bool(control.get(clave, True))
+
+    if not accion or accion in ('estado', 'status'):
+        estado = 'ACTIVA ✅' if activa else 'DESACTIVADA 🔕'
+        return f"""📷 <b>Cámara A{canal}</b>
+
+Estado: <b>{estado}</b>
+
+Elegí una acción con los botones de abajo.
+
+Uso manual:
+<code>/cam{canal} estado</code>
+<code>/cam{canal} activar</code>
+<code>/cam{canal} desactivar</code>"""
+
+    if chat_id != TELEGRAM_ADMIN_ID:
+        return f"⛔ Solo el administrador puede activar o desactivar A{canal}."
+
+    if accion in ('activar', 'on', 'habilitar'):
+        nueva_activa = True
+        texto_estado = 'ACTIVADA ✅'
+    elif accion in ('desactivar', 'off', 'deshabilitar'):
+        nueva_activa = False
+        texto_estado = 'DESACTIVADA 🔕'
+    else:
+        return f"""⚠️ Uso de /cam{canal}:
+
+<code>/cam{canal} estado</code>
+<code>/cam{canal} activar</code>
+<code>/cam{canal} desactivar</code>"""
+
+    control[clave] = nueva_activa
+    guardar_control_camaras(control)
+    return f"📷 <b>Cámara A{canal} {texto_estado}</b>\n\nEl cambio queda aplicado para las próximas alertas del DVR."
 
 def cmd_activar(chat_id: str) -> str:
     """Activa el modo detección (forzado)."""
@@ -990,11 +1120,13 @@ def cmd_logs(chat_id: str, servicio: str = "watcher", lineas: str = "15") -> str
 def cmd_help(chat_id: str) -> str:
     """Muestra ayuda."""
     es_admin = chat_id == TELEGRAM_ADMIN_ID
-    
+
     comandos_base = f"""🤖 <b>Sistema de Detección de Personas v{TELEGRAM_BOT_VERSION}</b>
 
 <b>Comandos de estado:</b>
 /estado - Estado actual del sistema
+/cam3 [estado|activar|desactivar] - Control de cámara A3
+/cam4 [estado|activar|desactivar] - Control de cámara A4
 /ultimo - Última detección de persona
 /stats - Estadísticas del día
 /historial [dia|semana|mes] - Historial con tokens
@@ -1019,7 +1151,7 @@ def cmd_help(chat_id: str) -> str:
   • /limpiar 7 = más de 7 días (default)
 /test - Enviar notificación de prueba
 /logs [watcher|bot] [N] - Ver últimas N líneas de logs"""
-    
+
     return comandos_base
 
 # ============================================
@@ -1045,6 +1177,10 @@ COMMANDS = {
     '/help': cmd_help,
     '/start': cmd_help,
 }
+
+# Registrar comandos de cámaras controlables
+for canal in CAMARAS_CONTROLABLES:
+    COMMANDS[f'/cam{canal}'] = cmd_cam
 
 def procesar_mensaje(update: Dict[str, Any]):
     """Procesa un mensaje recibido."""
@@ -1078,6 +1214,7 @@ def procesar_mensaje(update: Dict[str, Any]):
     # Buscar handler
     handler = COMMANDS.get(command)
     if handler:
+        reply_markup = None
         # Manejar comandos con argumentos
         if command == '/historial':
             periodo = args[0].lower() if args else 'dia'
@@ -1095,12 +1232,81 @@ def procesar_mensaje(update: Dict[str, Any]):
             servicio = args[0] if len(args) > 0 else "watcher"
             lineas = args[1] if len(args) > 1 else "15"
             respuesta = handler(chat_id, servicio, lineas)
+        elif command.startswith('/cam') and command[4:].isdigit():
+            # Comandos de cámara: /cam3, /cam4, etc.
+            canal = int(command[4:])
+            accion = args[0] if args else ""
+            respuesta = handler(chat_id, canal, accion)
+            reply_markup = teclado_cam(canal)
         else:
             respuesta = handler(chat_id)
-        enviar_mensaje(chat_id, respuesta)
+        enviar_mensaje(chat_id, respuesta, reply_markup=reply_markup)
     else:
         # Comando no reconocido
         enviar_mensaje(chat_id, "❓ Comando no reconocido. Usa /help para ver comandos disponibles.")
+
+def procesar_callback(update: Dict[str, Any]):
+    """Procesa las pulsaciones de botones inline de Telegram."""
+    callback = update.get('callback_query', {})
+    callback_id = callback.get('id', '')
+    message = callback.get('message', {})
+    chat_id = str(message.get('chat', {}).get('id', ''))
+    message_id = message.get('message_id')
+    data = callback.get('data', '')
+    username = callback.get('from', {}).get('username', 'desconocido')
+
+    if not callback_id or not chat_id:
+        return
+
+    if chat_id != TELEGRAM_ADMIN_ID and chat_id not in TELEGRAM_CHAT_IDS:
+        logger.warning(f"Botón de chat no autorizado: {chat_id} ({username})")
+        responder_callback(callback_id, "Chat no autorizado", show_alert=True)
+        return
+
+    # Parseo robusto: cam{n}:accion
+    if not data or ':' not in data:
+        responder_callback(callback_id, "Botón no reconocido", show_alert=True)
+        return
+
+    partes = data.split(':', 1)
+    if len(partes) != 2:
+        responder_callback(callback_id, "Botón no reconocido", show_alert=True)
+        return
+
+    prefijo, accion = partes
+
+    # Validar que el prefijo es cam{n}
+    if not prefijo.startswith('cam') or not prefijo[3:].isdigit():
+        responder_callback(callback_id, "Botón no reconocido", show_alert=True)
+        return
+
+    canal = int(prefijo[3:])
+
+    # Validar que el canal está en cámaras controlables
+    if canal not in CAMARAS_CONTROLABLES:
+        responder_callback(callback_id, "Botón no reconocido", show_alert=True)
+        return
+
+    if accion not in ('estado', 'activar', 'desactivar'):
+        responder_callback(callback_id, "Acción no reconocida", show_alert=True)
+        return
+
+    if accion in ('activar', 'desactivar') and chat_id != TELEGRAM_ADMIN_ID:
+        responder_callback(callback_id, f"Solo el administrador puede cambiar A{canal}", show_alert=True)
+        return
+
+    try:
+        respuesta = cmd_cam(chat_id, canal, accion)
+        if message_id is not None:
+            editar_mensaje(chat_id, message_id, respuesta, reply_markup=teclado_cam(canal))
+        else:
+            enviar_mensaje(chat_id, respuesta, reply_markup=teclado_cam(canal))
+        texto_confirmacion = 'Estado actualizado' if accion != 'estado' else 'Estado consultado'
+        responder_callback(callback_id, texto_confirmacion)
+        logger.info(f"Botón recibido: {data} de {username} ({chat_id})")
+    except Exception as e:
+        logger.error(f"Error procesando botón {data}: {e}")
+        responder_callback(callback_id, "Error procesando la acción", show_alert=True)
 
 # ============================================
 # FLASK APP (WEBHOOK MODE)
@@ -1119,7 +1325,10 @@ def webhook():
         update = request.get_json()
         if update:
             # Procesar en el mismo thread para responder rápido
-            procesar_mensaje(update)
+            if update.get('callback_query'):
+                procesar_callback(update)
+            else:
+                procesar_mensaje(update)
         return jsonify({'ok': True}), 200
     except Exception as e:
         logger.error(f"Error procesando webhook: {e}")
@@ -1140,7 +1349,7 @@ def setup_bot_commands():
     if not TELEGRAM_BOT_TOKEN:
         logger.warning("No se pueden configurar comandos: TELEGRAM_BOT_TOKEN no configurado")
         return
-    
+
     commands = [
         {"command": "activar", "description": "Activa el modo detección forzado 24/7"},
         {"command": "desactivar", "description": "Desactiva el modo detección"},
@@ -1148,12 +1357,14 @@ def setup_bot_commands():
         {"command": "estado", "description": "Muestra el estado actual del sistema"},
         {"command": "stats", "description": "Muestra estadísticas del día"},
         {"command": "logs", "description": "Muestra logs (uso: /logs watcher 15)"},
+        {"command": "cam3", "description": "Control A3 con botones"},
+        {"command": "cam4", "description": "Control A4 con botones"},
         {"command": "help", "description": "Muestra ayuda con todos los comandos disponibles"}
     ]
-    
+
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setMyCommands"
     payload = {"commands": commands}
-    
+
     try:
         response = requests.post(url, json=payload, timeout=10)
         if response.json().get('ok'):

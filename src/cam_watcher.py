@@ -120,6 +120,12 @@ DETECCION_FIN = CONFIG.get("DETECCION_FIN", "07:45")
 # IA
 AI_MODEL = CONFIG.get("AI_MODEL", "gemini-3-flash")
 OPENROUTER_API_KEY = CONFIG.get("OPENROUTER_API_KEY", "")
+# Proveedor efectivo del análisis: "openrouter" (chat/completions) | "copilot" (responses)
+AI_PROVIDER = CONFIG.get("AI_PROVIDER", "openrouter").strip().lower()
+# Si Copilot falla (token vencido, 5xx, red), reintentar con OpenRouter en vez de perder el análisis
+AI_FALLBACK_OPENROUTER = CONFIG.get("AI_FALLBACK_OPENROUTER", "true").lower() == "true"
+# Techo de tokens de salida en Copilot: incluye tokens de razonamiento antes del texto
+AI_MAX_OUTPUT_TOKENS = int(CONFIG.get("AI_MAX_OUTPUT_TOKENS", "200"))
 
 # Model OpenRouter que usan vision
 OPENROUTER_VISION_MODELS = [
@@ -127,6 +133,7 @@ OPENROUTER_VISION_MODELS = [
     "google/gemma-3-27b-it:free",
     "google/gemini-2.5-flash-lite-preview-09-2025",
     "google/gemini-3.1-flash-lite-preview",
+    "gpt-6-luna",
     "qwen/qwen3.5-9b",
     "qwen/qwen3.5-flash-02-23",
 ]
@@ -1183,6 +1190,104 @@ def _analizar_con_openrouter(image_data: bytes, image_type: str, prompt: str) ->
 
 
 # ============================================
+# ANÁLISIS CON IA - GitHub Copilot (Responses API)
+# ============================================
+
+# gpt-6-luna en Copilot sólo acepta /responses; /chat/completions responde
+# 400 unsupported_api_for_model. Headers copiados del cliente oficial.
+COPILOT_RESPONSES_URL = "https://api.githubcopilot.com/responses"
+COPILOT_EDITOR_VERSION = "vscode/1.104.1"
+COPILOT_INTEGRATION_ID = "vscode-chat"
+_COPILOT_TOKEN_TTL = 600  # segundos de caché cuando el token viene de `gh auth token`
+_copilot_token_cache: Dict[str, Any] = {"token": "", "ts": 0.0}
+
+
+def _resolve_copilot_token() -> str:
+    """Token GitHub para la API de Copilot: COPILOT_GITHUB_TOKEN del .env o `gh auth token`."""
+    token = CONFIG.get("COPILOT_GITHUB_TOKEN", "").strip()
+    if token:
+        return token
+    now = time.time()
+    if (
+        _copilot_token_cache["token"]
+        and now - _copilot_token_cache["ts"] < _COPILOT_TOKEN_TTL
+    ):
+        return _copilot_token_cache["token"]
+    gh_token = subprocess.run(
+        ["gh", "auth", "token"], capture_output=True, text=True, timeout=10
+    ).stdout.strip()
+    if not gh_token:
+        raise Exception(
+            "Sin token de Copilot: definí COPILOT_GITHUB_TOKEN en .env o autenticá `gh auth login`"
+        )
+    _copilot_token_cache["token"] = gh_token
+    _copilot_token_cache["ts"] = now
+    return gh_token
+
+
+def _analizar_con_copilot(image_data: bytes, image_type: str, prompt: str) -> dict:
+    """Analiza imagen usando GitHub Copilot (Responses API). Retorna dict con text y tokens."""
+    import base64
+
+    image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+    headers = {
+        "Authorization": f"Bearer {_resolve_copilot_token()}",
+        "Content-Type": "application/json",
+        "Editor-Version": COPILOT_EDITOR_VERSION,
+        "Copilot-Integration-Id": COPILOT_INTEGRATION_ID,
+        "Copilot-Vision-Request": "true",
+        "Openai-Intent": "conversation-edits",
+        "x-initiator": "user",
+        "User-Agent": "GitHubCopilotChat/0.26.7",
+        "Accept": "application/json",
+    }
+
+    payload = {
+        "model": AI_MODEL,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": prompt},
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:{image_type};base64,{image_base64}",
+                    },
+                ],
+            }
+        ],
+        "max_output_tokens": AI_MAX_OUTPUT_TOKENS,
+    }
+
+    response = requests.post(
+        COPILOT_RESPONSES_URL,
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Copilot error {response.status_code}: {response.text[:200]}")
+
+    data = response.json()
+    text = ""
+    for item in data.get("output", []):
+        if item.get("type") != "message":
+            continue
+        for content in item.get("content") or []:
+            if content.get("type") in ("output_text", "text"):
+                text += content.get("text", "")
+    usage = data.get("usage", {}) or {}
+    return {
+        "text": text,
+        "tokens_prompt": usage.get("input_tokens", 0),
+        "tokens_completion": usage.get("output_tokens", 0),
+        "tokens_total": usage.get("total_tokens", 0),
+    }
+
+
+# ============================================
 # ANÁLISIS CON IA
 # ============================================
 
@@ -1247,7 +1352,18 @@ def analizar_imagen(imagen_path: str, camara: str = "") -> Dict[str, Any]:
             DETECTION_PROMPT_SOSPECHOSA if usar_prompt_sospecha else DETECTION_PROMPT
         )
 
-        or_result = _analizar_con_openrouter(image_data, image_type, prompt)
+        if AI_PROVIDER == "copilot":
+            try:
+                or_result = _analizar_con_copilot(image_data, image_type, prompt)
+            except Exception as copilot_error:
+                if not AI_FALLBACK_OPENROUTER:
+                    raise
+                logger.warning(
+                    f"Copilot falló ({copilot_error}); reintentando con OpenRouter"
+                )
+                or_result = _analizar_con_openrouter(image_data, image_type, prompt)
+        else:
+            or_result = _analizar_con_openrouter(image_data, image_type, prompt)
         text = or_result["text"]
         result = {
             **_resultado_error,
@@ -2080,6 +2196,10 @@ def main():
     )
     logger.info(f"Fondo cámaras activas: {', '.join(FONDO_CAMARAS_ACTIVAS)}")
     logger.info(f"Auditoría IA: {AI_AUDIT_LOG_FILE}")
+    logger.info(
+        f"IA: proveedor={AI_PROVIDER} modelo={AI_MODEL} "
+        f"fallback_openrouter={AI_FALLBACK_OPENROUTER}"
+    )
     logger.info("=" * 60)
 
     if not TELEGRAM_BOT_TOKEN:

@@ -4,10 +4,10 @@ Vigilancia con cámaras DVR Hikvision + cámara IP, análisis con IA y alertas p
 
 | Aspecto | Detalle |
 |---------|---------|
-| Versión | 2.10.11 (2026-04-13) |
+| Versión | 2.11.0 (2026-10-22) |
 | Servicios | `cam_watcher`, `telegram_bot`, `dvr-alertas` |
 | Webhook | `https://server1.dev0p.com/webhook/camdetector` |
-| IA | OpenRouter (default: `qwen/qwen3.5-flash-02-23`) |
+| IA | GitHub Copilot `gpt-6-luna` (Responses API), fallback a OpenRouter |
 | Ruta | `/home/capw/projects/camdetector/` |
 
 ## Documentación
@@ -46,7 +46,7 @@ sudo systemctl restart dvr-alertas cam_watcher telegram_bot
 | Componente | Detalle |
 |------------|---------|
 | Lenguaje | Python 3 |
-| IA | OpenRouter API (Gemini 3.1 Flash Lite) |
+| IA | GitHub Copilot API (`gpt-6-luna`); OpenRouter como fallback |
 | Bot | Telegram Bot API (webhook) |
 | Monitoreo DVR | ffmpeg + RTSP |
 | Detección archivos | inotifywait |

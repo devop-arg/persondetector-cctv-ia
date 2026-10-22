@@ -18,6 +18,7 @@ import glob
 import logging
 import re
 import json
+import fcntl
 import urllib.request
 import urllib.error
 from dataclasses import dataclass
@@ -92,7 +93,7 @@ CAPTURA_LOG_EXCLUDE_KEYWORDS = [
 
 # Credenciales RTSP del DVR (configuradas en config/.env)
 DVR_USER = CONFIG.get("DVR_RTSP_USER", "cata")
-DVR_PASS = CONFIG.get("DVR_RTSP_PASS", "cata0106")
+DVR_PASS = CONFIG.get("DVR_RTSP_PASS", "")
 DVR_RTSP_PORT = int(CONFIG.get("DVR_RTSP_PORT", "5554"))
 
 # ============================================
@@ -109,6 +110,10 @@ TELEGRAM_CHAT_ID = CONFIG.get("DVR_TELEGRAM_CHAT_ID", CONFIG.get("TELEGRAM_ADMIN
 COOLDOWN_INACTIVO_SEG = 600  # 10 minutos
 CAMDETECTOR_STATE_FILE = "/home/capw/projects/camdetector/config/state.json"
 CAMDETECTOR_ENV_FILE = "/home/capw/projects/camdetector/config/.env"
+CAMERA_CONTROL_FILE = Path(CONFIG.get(
+    "CAMERA_CONTROL_FILE",
+    "/home/capw/projects/camdetector/config/camera_control.json"
+))
 
 # Mapeo de cámaras del DVR: A1..A8
 # URL RTSP: canal 1 = 101 (stream principal), 102 (substream)
@@ -150,6 +155,18 @@ BITMASK_CANALES = (
     (0x40, 7),
     (0x80, 8),
 )
+
+
+def camera_channel_enabled(canal: int) -> bool:
+    """Consulta el control dinámico de una cámara; por defecto queda habilitada."""
+    try:
+        with open(CAMERA_CONTROL_FILE, "r") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            control = json.load(f)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        return bool(control.get(f"DVR-A{canal}", True)) if isinstance(control, dict) else True
+    except (FileNotFoundError, json.JSONDecodeError, OSError, AttributeError):
+        return True
 
 
 @dataclass(frozen=True)
@@ -473,6 +490,11 @@ def iniciar_workers():
         t.start()
     log.info(f"QUEUE | workers={NUM_WORKERS} | maxsize={QUEUE_SIZE}")
     log.info(f"QUEUE | canales_habilitados={format_canales(list(DVR_ENABLED_CHANNELS))}")
+    control_status = []
+    for canal in (3, 4):
+        estado = 'ACTIVA' if camera_channel_enabled(canal) else 'DESACTIVADA'
+        control_status.append(f"A{canal}:{estado}")
+    log.info(f"QUEUE | control_camaras={','.join(control_status)}")
 
 
 def extraer_alertas_de_paquete(data):
@@ -773,6 +795,9 @@ def servidor_alertas():
                     for alerta in alertas:
                         if alerta.canal not in DVR_ENABLED_CHANNELS:
                             log.info(f"QUEUE | A{alerta.canal} | canal deshabilitado → SKIP")
+                            continue
+                        if not camera_channel_enabled(alerta.canal):
+                            log.info(f"QUEUE | A{alerta.canal} | cámara deshabilitada → SKIP")
                             continue
                         try:
                             alert_queue.put_nowait(alerta)

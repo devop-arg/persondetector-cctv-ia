@@ -9,7 +9,7 @@ Objetivo:
   al leer la conexión completa
 
 Uso típico:
-    echo 'whisky' | sudo -S python3 scripts/diag_tcp_connections.py --seconds 120
+    sudo python3 scripts/diag_tcp_connections.py --seconds 120
 """
 
 from __future__ import annotations
