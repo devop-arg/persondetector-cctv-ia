@@ -18,7 +18,6 @@ import sys
 import json
 import urllib.request
 from datetime import datetime
-import os
 from pathlib import Path
 
 # Configuración

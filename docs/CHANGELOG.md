@@ -472,7 +472,7 @@ ANALIZADO | DVR-A1 | archivo.jpg | PERSONA sospechosa=80% | tokens=168 (p:123/c:
 **Cambios en `.env`:**
 ```
 AI_MODEL=google/gemini-2.5-flash-lite-preview-09-2025
-OPENROUTER_API_KEY=sk-or-..._KEY
+OPENROUTER_API_KEY=sk-or-v1-TU_API_KEY
 ```
 
 **Cambios en `cam_watcher.py`:**
